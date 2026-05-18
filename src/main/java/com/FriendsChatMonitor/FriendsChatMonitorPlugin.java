@@ -4,10 +4,7 @@ import com.google.gson.Gson;
 import com.google.inject.Provides;
 import java.io.IOException;
 import java.util.HashMap;
-import java.time.ZoneId;
 import java.util.Map;
-import java.time.Instant;
-import java.time.format.*;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
@@ -51,9 +48,6 @@ public class FriendsChatMonitorPlugin extends Plugin
     // Replace with your actual Cloudflare Worker URL when deployed
     private static final String API_ENDPOINT = "https://friends-chat-monitor-cloudflare-worker.nhwhite3118.workers.dev/ingest";
 
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss")
-            .withZone(ZoneId.of("UTC"));
-
     @Provides
     FriendsChatMonitorConfig provideConfig(ConfigManager configManager)
     {
@@ -79,8 +73,7 @@ public class FriendsChatMonitorPlugin extends Plugin
                 return;
             }
 
-            String timestamp = TIME_FORMATTER.format(Instant.ofEpochSecond(event.getTimestamp()));
-            sendToSaaS(sanitizeName(event.getName()), event.getMessage(), timestamp);
+            sendToSaaS(sanitizeName(event.getName()), sanitizeMessage(event.getMessage()));
         }
     }
 
@@ -103,7 +96,17 @@ public class FriendsChatMonitorPlugin extends Plugin
         return Text.removeTags(sanitized).replace('\u00A0', ' ').trim();
     }
 
-    private void sendToSaaS(String author, String content, String timestamp)
+    private String sanitizeMessage(String message)
+    {
+        if (message == null)
+        {
+            return "";
+        }
+        // Remove chat formatting tags and fix non-breaking spaces for consistent hashing
+        return Text.removeTags(message).replace('\u00A0', ' ').trim();
+    }
+
+    private void sendToSaaS(String author, String content)
     {
         if (config.apiKey().isEmpty())
         {
@@ -113,7 +116,6 @@ public class FriendsChatMonitorPlugin extends Plugin
         Map<String, String> data = new HashMap<>();
         data.put("author", author);
         data.put("content", content);
-        data.put("timestamp", timestamp);
 
         Request request = new Request.Builder()
             .url(API_ENDPOINT)
